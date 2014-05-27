@@ -3,8 +3,9 @@ AWS.config.loadFromPath('./config/aws.json');
 var s3         = new AWS.S3(),
     configAuth = require('./../config/auth'),
     fs         = require('fs'),
-    async      = require('async')
-    request    = require('request');
+    async      = require('async'),
+    request    = require('request'),
+    ejs        = require('ejs');
 
 module.exports = function(app, passport) {
 
@@ -108,10 +109,14 @@ module.exports = function(app, passport) {
         });
     });
     app.post('/shout', isLoggedIn, function(req, res) {
-        var imgUrls = [];
-        var files   = [];
+        var imgUrls  = [];
+        var files    = [];
+        var filePath = null;
         for (var i in req.files) {
             files.push(req.files[i]);
+        }
+        if (files.length > 0) {
+            filePath = files[0].path;
         }
 
         var toSNS   = [];
@@ -131,19 +136,65 @@ module.exports = function(app, passport) {
             toSNS.push('tumblr');
         }
 
-        var content = req.body['txt-content'] || '';
-        if (!content) {
-            var error = 'Content can not be empty!';
+        var data = {};
+
+        data['product_name']      = req.body['product_name'] || '';
+        data['model_number']      = req.body['model_number'] || '';
+        data['current_price']     = req.body['current_price'] || '';
+        data['seller']            = req.body['seller'] || '';
+        data['pb_url']            = req.body['pb_url'] || '';
+        data['dis_percentage']    = req.body['dis_percentage'] || '';
+        data['dis_amount']        = req.body['dis_amount'] || '';
+        data['lowest_price']      = req.body['lowest_price'] === 'on' ? 1 : 0;
+        data['lowest_difference'] = req.body['lowest_difference'] || '';
+        data['lowest_time']       = req.body['lowest_time'] || '';
+        data['product_desc']      = req.body['product_desc'] || '';
+        data['custom_tag']        = req.body['custom_tag'] || '';
+
+        console.log(data);
+        if (!data) {
+            var error = 'Product information can not be empty';
             res.json({'error': error});
             console.log(error);
             return;
         }
 
+        function getContent(sns, data) {
+            if (!sns) {
+                return null;
+            }
+            var templatePath   = './views/sns_template/' + sns + '_template.ejs';
+            var templateString = null;
+
+            try{
+                templateString = fs.readFileSync(templatePath, 'utf-8');
+            } catch(err) {
+                console.log(err);
+                return null;
+            }
+
+            var content  = ejs.render(templateString, {'data': data});
+            console.log(content);
+            return content;
+        }
+
         function share() {
-            strImgUrls  = imgUrls.join(' ');
-            content += strImgUrls.length > 0 ? (' ' + strImgUrls) : '';
+            data['product_image'] = imgUrls;
+            
+            // var content = req.body['txt-content'] || '';
+
+            // strImgUrls  = imgUrls.join(' ');
+            // content += strImgUrls.length > 0 ? (' ' + strImgUrls) : '';
 
             async.each(toSNS, function(sns, callback) {
+                var content = getContent(sns, data);
+                if (!content) {
+                    var error = 'Content can not be empty!';
+                    res.json({'error': error});
+                    console.log(error);
+                    return;
+                }
+                
                 switch (sns) {
                     case 'facebook':
                         var FB = require('fb');
@@ -167,9 +218,18 @@ module.exports = function(app, passport) {
                             consumerSecret : configAuth.twitterAuth.consumerSecret,
                             callback       : configAuth.twitterAuth.callbackURL
                         });
+                        
+                        var type = 'update';
+                        var params = {status: content};
+                        if (filePath) {
+                            type = 'update_with_media';
+                            // params.media = imgUrls[0];
+                            params.media = new Array(filePath);
+                        }
+
                         twitter.statuses(
-                            'update',
-                            {status: content},
+                            type,
+                            params,
                             req.user.twitter.token,
                             req.user.twitter.tokenSecret,
                             function (error, data, response) { // data contains the data sent by twitter
@@ -187,12 +247,14 @@ module.exports = function(app, passport) {
                         );
                         break;
                     case 'renren':
+                        var title   = content.substring(content.indexOf('[title]')+7, content.indexOf('[content]'));
+                        var message = content.substring(content.indexOf('[content]')+9, content.length);
                         request.post(
                             'https://api.renren.com/v2/feed/put',
                             {form: {
                                 access_token : req.user.renren.token,
-                                message      : content,
-                                title        : 'PriceBeater',
+                                message      : message,
+                                title        : title,
                                 description  : 'PriceBeater',
                                 targetUrl    : 'http://www.pricebeater.ca'
                             }},
@@ -233,32 +295,34 @@ module.exports = function(app, passport) {
                         );
                         break;
                     case 'tumblr':
-                        var nodemailer = require('nodemailer'),
-                            transport  = nodemailer.createTransport(
-                                configAuth.tumblrAuth.nodemailerTransport.type,
-                                configAuth.tumblrAuth.nodemailerTransport.option
-                            );
-                        var tblContent = req.body['txt-content'];
-                        for (i = 0; i < imgUrls.length; i++) {
-                            tblContent += '\n\n' + '![image ' + i + '](' + imgUrls[i] + ')';
-                        }
-                        transport.sendMail({
-                            from    : configAuth.tumblrAuth.fromAddress,
-                            to      : configAuth.tumblrAuth.postAddress,
-                            subject : 'PriceBeater !m',
-                            text    : tblContent
-                        }, function(error, responseStatus) {
-                            if (error) {
-                                callback({
-                                    sns   : 'tumblr',
-                                    error : error
-                                });
-                                return;
-                            }
-                            callback();
-                            console.log("[Tumblr] mail response: "   + responseStatus.message); // response from the server
-                            console.log("[Tumblr] mail message-id: " + responseStatus.messageId); // Message-ID value used
+                        var tumblr = require('tumblr.js');
+                        
+                        var title   = content.substring(content.indexOf('[title]')+7, content.indexOf('[content]'));
+                        var body    = content.substring(content.indexOf('[content]')+9, content.length);
+
+                        var client = tumblr.createClient({
+                          consumer_key   : configAuth.tumblrAuth.consumerKey,
+                          consumer_secret: configAuth.tumblrAuth.consumerSecret,
+                          token          : req.user.tumblr.token,
+                          token_secret   : req.user.tumblr.tokenSecret
                         });
+                        
+                        client.text(
+                            req.user.tumblr.username, 
+                            { 
+                                title: title, body: body 
+                            }, 
+                            function (err, resp) {
+                                if (err) {
+                                    callback({
+                                        sns   : 'tumblr',
+                                        error : err
+                                    });
+                                    return;
+                                }
+                                callback();
+                                console.log('[Tumblr] OK!');
+                            });  
                         break;
                     default:
                         callback({
@@ -291,6 +355,7 @@ module.exports = function(app, passport) {
                     ContentType : file.type || 'image/png'
                 };
                 s3.putObject(s3Params, function (perr, pres) {
+                    console.log(perr);
                     if (perr) {
                         callback('[AWS] Error uploading data: ', perr);
                         return perr;
@@ -390,6 +455,18 @@ module.exports = function(app, passport) {
             passport.authenticate('twitter', {
                 successRedirect : '/bullhorn',
                 failureRedirect : '/'
+            }));    
+
+    // tumblr --------------------------------
+
+        // send to tumblr to do the authentication
+        app.get('/auth/tumblr', passport.authenticate('tumblr', { scope : 'email' }));
+
+        // handle the callback after tumblr has authenticated the user
+        app.get('/auth/tumblr/callback',
+            passport.authenticate('tumblr', {
+                successRedirect : '/bullhorn',
+                failureRedirect : '/'
             }));
 
     // google ---------------------------------
@@ -462,6 +539,18 @@ module.exports = function(app, passport) {
         // handle the callback after twitter has authorized the user
         app.get('/connect/twitter/callback',
             passport.authorize('twitter', {
+                successRedirect : '/profile',
+                failureRedirect : '/'
+            }));    
+
+    // tumblr --------------------------------
+
+        // send to twitter to do the authentication
+        app.get('/connect/tumblr', passport.authorize('tumblr', { scope : 'email' }));
+
+        // handle the callback after tumblr has authorized the user
+        app.get('/connect/tumblr/callback',
+            passport.authorize('tumblr', {
                 successRedirect : '/profile',
                 failureRedirect : '/'
             }));

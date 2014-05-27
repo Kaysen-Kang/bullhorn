@@ -10,15 +10,28 @@
             word-wrap:break-word;
         }
 
-        #form {
-            width: 730px;
-            margin-left: auto;
-            margin-right: auto;
+        textarea {
+            margin-left: 10px;
+            width: 154px;
+            vertical-align: middle;
         }
 
-        #txt-content {
-            width: 100%;
-            height: 137px;
+        select {
+            width: 122px;
+            vertical-align: middle;
+        }
+
+        label {
+            width: 122px;
+            vertical-align: middle;
+        }
+
+        input {
+            margin-left: 10px;
+        }
+
+        input[type="file"] {
+            display: inline;
         }
     </style>
     <script src="http://cdn.staticfile.org/jquery/2.0.3/jquery.min.js"></script>
@@ -35,12 +48,16 @@
     <div class="row">
         <div class="col-sm-12">
             <div id="form">
-                <textarea id="txt-content" name="txt-content" placeholder="Share something here!"></textarea>
+                <!-- <textarea id="txt-content" name="txt-content" placeholder="Share something here!"></textarea> -->
                 <br><br>
                 <div id="actions">
                     <% if (user.twitter.token) { %>
                         <input type="checkbox" id="sns-twitter" name="sns-twitter" checked="checked">
                         <label for="sns-twitter"> Twitter </label>
+                    <% } %>
+                    <% if (user.tumblr.token) { %>
+                        <input type="checkbox" id="sns-tumblr" name="sns-tumblr" checked="checked">
+                        <label for="sns-tumblr"> Tumblr </label>
                     <% } %>
                     <% if (user.facebook.token && !expired.facebook) { %>
                         <input type="checkbox" id="sns-facebook" name="sns-facebook" checked="checked">
@@ -64,19 +81,61 @@
                     <% if (expired.weibo) { %>
                         <a href="/connect/weibo" class="btn btn-danger">Refresh Weibo token</a>
                     <% } %>
-                    <% if (userExt.tumblr.postAddress) { %>
-                        <input type="checkbox" id="sns-tumblr" name="sns-tumblr" checked="checked">
-                        <label for="sns-tumblr"> Tumblr </label>
-                    <% } %>
-                    <button id="btn-pin" type="button">Pinterest</button>
-                    &nbsp;&nbsp;
+                        <br/>
+                        <label for="product_name"> Product Name </label>                        
+                        <input id="product_name" name="product_name"><br/>
+
+                        <label for="model_number"> Model Number</label>                        
+                        <input id="model_number" name="model_number"><br/>
+                        
+                        <label for="current_price"> Current Price </label>                        
+                        <input id="current_price" name="current_price"><br/>
+                        
+                        <label for="seller"> Seller </label>                        
+                        <input id="seller" name="seller"><br/>
+                        
+                        <label for="pb_url"> Pb Url </label>                        
+                        <input id="pb_url" name="pb_url"><br/>
+
+                        <select id="dis" name="dis">
+                            <option value="dis_percentage">Dis Percentage</option>
+                            <option value="dis_amount">Dis Amount</option>
+                        </select>
+                        <input id="dis_percentage" name="dis_percentage">
+                        <input id="dis_amount" name="dis_amount" hidden>
+                        <br/>
+
+                        <input type="checkbox" id="lowest_price" name="lowest_price" checked="checked">
+                        <label for="sns-tumblr"> Lowest Price </label>        
+                        <br/>
+                        
+                        <div id="lowest_infor" hidden>
+                        <label for="sns-tumblr"> Lowest Difference </label> 
+                        <input type="text" id="lowest_difference" name="lowest_difference">
+                        <br/>
+
+                        <label for="lowest_time"> Lowest Time </label>    
+                        <input type="text" id="lowest_time" name="lowest_time"><br/>
+                        </div>
+                        
+                        <label for="product_desc"> Product Desc </label>
+                        <textarea id="product_desc" name="product_desc"></textarea><br/>
+
+                        <label for="product_image"> Product Image </label>
+                        <input name="img-0" type="file" class="file-input">
+                        <br/>
+
+                        <label for="custom_tag"> Custom Tag </label>      
+                        <input type="text" id="custom_tag" name="custom_tag"><br/>
+
+                    <!-- <button id="btn-pin" type="button">Pinterest</button> -->
                     <span id='txt-count'></span>
                     <button id="btn-shout" type="button">Shout</button>
                 </div>
                 <br>
-                <div id="files">
+<!--                 <div id="files">
                     <input name="img-0" type="file" class="file-input">
-                </div>
+                </div> -->
             </div>
         </div>
     </div>
@@ -84,7 +143,8 @@
 </div>
 <script>
     var count = function() {
-        var content     = $('#txt-content').val();
+        // var content     = $('#txt-content').val();
+        var content     = $('#txt-content').val() || '';
         var filesInputs = $('.file-input');
         var filesCount  = 0;
         var tinyLength  = 24;
@@ -135,15 +195,31 @@
         var data = new FormData();
         var snsCheckBox = $('[name^=sns-]');
         var filesInputs = $('.file-input');
-        data.append('txt-content', $('#txt-content').val());
+
+        data.append('product_name', $('#product_name').val());
+        data.append('model_number', $('#model_number').val());
+        data.append('current_price', $('#current_price').val());
+        data.append('seller', $('#seller').val());
+        data.append('pb_url', $('#pb_url').val());
+        data.append('dis_percentage', $('#dis_percentage').val());
+        data.append('dis_amount', $('#dis_amount').val());
+        data.append('lowest_price', $('#lowest_price').is(':checked') ? 'on' : 'off');
+        data.append('lowest_difference', $('#lowest_difference').val());
+        data.append('lowest_time', $('#lowest_time').val());
+        data.append('product_desc', $('#product_desc').val());
+        data.append('custom_tag', $('#custom_tag').val());
+        // data.append('txt-content', $('#txt-content').val());
+        
         for (var i = 0; i < snsCheckBox.length; i++) {
             data.append(snsCheckBox[i].name, snsCheckBox[i].checked ? snsCheckBox[i].value : '');
         }
+        
         for (i = 0; i < filesInputs.length; i++) {
             if ($(filesInputs[i]).val().length > 0) {
                 data.append(filesInputs[i].name, filesInputs[i].files[0]);
             }
         }
+        
         $.ajax({
             url: '/shout',
             data: data,
@@ -191,11 +267,29 @@
         });
     });
 
+    $('#dis').on('change', function() {
+        $('#dis_percentage').hide();
+        $('#dis_amount').hide();
+        $('#'+this.value).show();
+    });
+
+    $('#lowest_price').on('change', function() {
+        if ($('#lowest_price').is(':checked')) {
+            $('#lowest_infor').hide();
+            $('#lowest_time').val('');
+            $('#lowest_difference').val('');
+        } else {
+            $('#lowest_infor').show();
+        }
+
+    });
+
     $('#txt-content').on('input', count);
 
     $('[name^=sns-]').on('click', count);
 
     count();
+
 </script>
 </body>
 </html>

@@ -90,6 +90,28 @@
 
 			</div>
 		</div>
+	</div>	
+
+	<!-- TUMBLR INFORMATION -->
+	<div class="row">
+		<div class="col-sm-12">
+			<div class="well">
+				<h3 class="text-info"><span class="fa fa-tumblr"></span> Tumblr</h3>
+
+				<% if (user.tumblr.token) { %>
+					<p>
+						<strong>token</strong>: <%= user.tumblr.token %><br>
+						<strong>token secret</strong>: <%= user.tumblr.tokenSecret %><br>
+						<strong>username</strong>: <%= user.tumblr.username %>
+					</p>
+
+					<a href="/unlink/tumblr" class="btn btn-info">Unlink</a>
+				<% } else { %>
+					<a href="/connect/tumblr" class="btn btn-info">Connect Tumblr</a>
+				<% } %>
+
+			</div>
+		</div>
 	</div>
 
 	<!-- GOOGLE INFORMATION -->
